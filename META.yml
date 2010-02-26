@@ -1,6 +1,6 @@
 --- #YAML:1.0
 name:               SOOT-App
-version:            0.01
+version:            0.02
 abstract:           A Perl REPL using SOOT (ROOT)
 author:
     - Steffen Mueller <smueller@cpan.org>
@@ -13,7 +13,7 @@ build_requires:
 requires:
     Capture::Tiny:  0
     Devel::REPL:    1.003000
-    SOOT:           0.03
+    SOOT:           0.04
 no_index:
     directory:
         - t

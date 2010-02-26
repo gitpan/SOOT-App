@@ -2,17 +2,33 @@ package SOOT::App;
 use 5.008001;
 use strict;
 use warnings;
+use Getopt::Long ();
+use File::Spec;
 
-our $VERSION = '0.01';
+our $VERSION = '0.02';
 use Capture::Tiny qw/capture/;
+
+sub usage {
+  print <<'HERE';
+Usage: soot [options]
+
+  -n   Do not execute logon macros
+HERE
+  exit(1);
+}
 
 sub run {
   my $class = shift;
+  my $nologon = 0;
+  Getopt::Long::GetOptions(
+    'h|help' => \&usage,
+    'n' => \$nologon,
+  );
   require Devel::REPL;
   require SOOT;
 
   my $repl = Devel::REPL->new;
-  foreach (qw(FindVariable History LexEnv)) {
+  foreach (qw(FindVariable History LexEnv SOOT)) {
     $repl->load_plugin($_)
   }
   foreach (qw(Colors Completion DDS Interrupt
@@ -26,11 +42,12 @@ sub run {
   package main;
   SOOT->import(':all');
   # FIXME: mst will likely kill me for this
-  $repl->formatted_eval("no strict");
+  $repl->formatted_eval("package main;");
+  $repl->formatted_eval("no strict 'vars'");
   $repl->formatted_eval("use SOOT qw/:all/");
+  SOOT::Init($nologon ? 0 : 1);
   return $repl->run();
 }
-
 
 1;
 __END__

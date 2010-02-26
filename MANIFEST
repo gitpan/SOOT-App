@@ -1,5 +1,6 @@
 bin/soot
 Changes
+lib/Devel/REPL/Plugin/SOOT.pm
 lib/SOOT/App.pm
 LICENSE
 Makefile.PL
