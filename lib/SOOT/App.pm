@@ -4,9 +4,13 @@ use strict;
 use warnings;
 use Getopt::Long ();
 use File::Spec;
-
-our $VERSION = '0.02';
+use threads;
 use Capture::Tiny qw/capture/;
+use Time::HiRes 'usleep';
+use vars '%SIG';
+
+our $VERSION = '0.03';
+our $AppThread;
 
 sub usage {
   print <<'HERE';
@@ -19,11 +23,18 @@ HERE
 
 sub run {
   my $class = shift;
+
+  my %opts = @_;
+  my $argv = $opts{argv}||[];
+
   my $nologon = 0;
-  Getopt::Long::GetOptions(
+  Getopt::Long::GetOptionsFromArray(
+    $argv,
     'h|help' => \&usage,
     'n' => \$nologon,
   );
+
+  my @files_to_open = @$argv;
   require Devel::REPL;
   require SOOT;
 
@@ -39,14 +50,69 @@ sub run {
       }
     };
   }
+  create_app_thread();
   package main;
   SOOT->import(':all');
   # FIXME: mst will likely kill me for this
   $repl->formatted_eval("package main;");
   $repl->formatted_eval("no strict 'vars'");
   $repl->formatted_eval("use SOOT qw/:all/");
+  $repl->formatted_eval("use Data::Dumper;");
   SOOT::Init($nologon ? 0 : 1);
+
+  $class->_open_root_files(\@files_to_open);
+
   return $repl->run();
+}
+
+sub _open_root_files {
+  my $class = shift;
+  my $files = shift;
+
+  no strict 'vars';
+  package main;
+  foreach my $file (map {glob $_} @$files) {
+    my $f = TFile->new($file, 'READ');
+    push @files, $f;
+    print "Attached file '$file' as \$main::files[" . $#main::files . "]...\n";
+  }
+  return();
+}
+
+sub create_app_thread {
+  if (not $AppThread) {
+    $SOOT::gApplication->SetReturnFromRun(1);
+    $AppThread = threads->new(\&apploop);
+    usleep(5000); # FIXME find better way to fix this
+    $SOOT::gApplication->SetReturnFromRun(1);
+  }
+}
+
+sub apploop {
+  $SOOT::gApplication->SetReturnFromRun(1);
+  $SOOT::gApplication->Run();
+}
+
+sub kill_app_thread {
+  return if !$AppThread;
+  $SOOT::gApplication->Terminate();
+  $AppThread->kill('TERM')->kill('KILL')->detach;
+  $AppThread = undef;
+}
+
+END {
+  kill_app_thread();
+}
+
+SCOPE: {
+  my %sig;
+  sub init_signal_handlers {
+    if (not keys %sig) {
+      %sig = %SIG;
+      $SIG{TERM} = sub { kill_app_thread(); return $sig{TERM}->() if ref($SIG{TERM}) eq 'CODE' };
+      $SIG{INT}  = sub { kill_app_thread(); return $sig{INT}->() if ref($SIG{INT}) eq 'CODE' };
+    }
+  }
 }
 
 1;
